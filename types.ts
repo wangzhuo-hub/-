@@ -14,6 +14,7 @@ export interface Park {
   tags?: string[];
   totalArea: number; // Total GFA in sqm (sum of buildings)
   createdAt: number;
+  isOwnPark?: boolean; // Flag to identify our own park
 }
 
 export interface SurveyRecord {
@@ -38,6 +39,10 @@ export interface MarketStats {
   avgRentPrice: number;
   totalVacancyArea: number;
   recentTrends: string;
+}
+
+export interface AppSettings {
+  quarterlyTarget: number; // Target surveys per park per quarter
 }
 
 export enum ViewState {

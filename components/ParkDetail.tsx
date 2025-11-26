@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Park, SurveyRecord, Building } from '../types';
 import { StorageService } from '../services/storageService';
 import { ArrowLeft, Plus, Calendar, Percent, Tag, Building as BuildingIcon, Edit, Trash, DollarSign, AlertCircle, X, BarChart2, TrendingUp, Briefcase } from 'lucide-react';
@@ -25,6 +25,7 @@ const ParkDetail: React.FC<ParkDetailProps> = ({ parkId, onBack }) => {
 
   // Chart State
   const [chartMetric, setChartMetric] = useState<'occupancy' | 'rent' | 'commission'>('occupancy');
+  const [dateRange, setDateRange] = useState<string>('6M');
 
   useEffect(() => {
     refreshData();
@@ -89,16 +90,34 @@ const ParkDetail: React.FC<ParkDetailProps> = ({ parkId, onBack }) => {
   };
 
   // Chart Helpers
-  const parseCommissionValue = (str: string): number => {
-      const match = str.match(/[\d.]+/);
+  const parseCommissionValue = (str: string | undefined): number => {
+      if (!str) return 0;
+      const match = String(str).match(/[\d.]+/);
       return match ? parseFloat(match[0]) : 0;
   };
 
-  if (!park) return <div className="p-8">加载中...</div>;
+  // Filtered Chart Data (Moved BEFORE any early return)
+  const filteredSurveys = useMemo(() => {
+      const now = new Date();
+      let startDate = new Date();
+      if (dateRange === '6M') startDate.setMonth(now.getMonth() - 5);
+      else if (dateRange === '1Y') startDate.setFullYear(now.getFullYear() - 1);
+      else if (dateRange === 'YTD') startDate = new Date(now.getFullYear(), 0, 1);
+      else {
+           startDate = new Date(parseInt(dateRange), 0, 1);
+           now.setFullYear(parseInt(dateRange), 11, 31);
+      }
+      startDate.setHours(0,0,0,0);
+      
+      return surveys.filter(s => {
+          const d = new Date(s.date);
+          return d >= startDate && d <= now;
+      });
+  }, [surveys, dateRange]);
 
-  // Chart Data Preparation
-  const chartData = surveys
-    .slice(0, 10)
+  // Derived Data (Safe to calculate even if park is null, or handle null check inline)
+  const chartData = filteredSurveys
+    .slice()
     .reverse()
     .map(s => ({
         date: s.date,
@@ -107,10 +126,22 @@ const ParkDetail: React.FC<ParkDetailProps> = ({ parkId, onBack }) => {
         commission: parseCommissionValue(s.commission)
     }));
   
+  // Available Years
+  const availableYears = Array.from(new Set(surveys.map(s => {
+      const d = new Date(s.date);
+      return isNaN(d.getTime()) ? '' : d.getFullYear().toString();
+  }).filter(y => y !== ''))).sort().reverse();
+
+  // Early Return for Loading (NOW placed after all Hooks)
+  if (!park) return <div className="p-8 text-center text-slate-500">正在加载园区信息...</div>;
+
   const latestSurvey = surveys[0];
   const vacantArea = latestSurvey && park.totalArea 
     ? Math.round(park.totalArea * (100 - latestSurvey.occupancyRate) / 100)
     : 0;
+
+  // Safe access to buildings
+  const buildings = park.buildings || [];
 
   return (
     <div className="space-y-6">
@@ -128,7 +159,7 @@ const ParkDetail: React.FC<ParkDetailProps> = ({ parkId, onBack }) => {
                 </h1>
                 <p className="text-slate-500 flex items-center mt-1">
                     <span className="bg-slate-100 px-2 py-0.5 rounded text-xs font-medium mr-2 text-slate-600 border border-slate-300">
-                        {park.buildings.length} 栋楼宇
+                        {buildings.length} 栋楼宇
                     </span>
                     {park.address}
                 </p>
@@ -177,64 +208,80 @@ const ParkDetail: React.FC<ParkDetailProps> = ({ parkId, onBack }) => {
           {/* History Column */}
           <div className="lg:col-span-2 space-y-6">
             {/* Chart */}
-            {surveys.length > 1 && (
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                    <div className="flex justify-between items-center mb-6">
-                         <h3 className="font-bold text-slate-800">历史数据走势</h3>
-                         <div className="flex bg-slate-100 p-1 rounded-lg">
-                            <button 
-                                onClick={() => setChartMetric('occupancy')}
-                                className={`px-3 py-1 text-xs font-medium rounded-md transition ${chartMetric === 'occupancy' ? 'bg-white shadow text-accent' : 'text-slate-500 hover:text-slate-700'}`}
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-3">
+                        <h3 className="font-bold text-slate-800">历史数据走势</h3>
+                        <div className="flex items-center space-x-2">
+                            <select 
+                                value={dateRange}
+                                onChange={(e) => setDateRange(e.target.value)}
+                                className="text-xs border border-slate-300 rounded p-1 outline-none focus:border-accent bg-slate-50"
                             >
-                                出租率
-                            </button>
-                            <button 
-                                onClick={() => setChartMetric('rent')}
-                                className={`px-3 py-1 text-xs font-medium rounded-md transition ${chartMetric === 'rent' ? 'bg-white shadow text-accent' : 'text-slate-500 hover:text-slate-700'}`}
-                            >
-                                租金
-                            </button>
-                             <button 
-                                onClick={() => setChartMetric('commission')}
-                                className={`px-3 py-1 text-xs font-medium rounded-md transition ${chartMetric === 'commission' ? 'bg-white shadow text-accent' : 'text-slate-500 hover:text-slate-700'}`}
-                            >
-                                中介费
-                            </button>
-                         </div>
-                    </div>
-                    
-                    <div className="h-64">
-                         <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={chartData}>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                                <XAxis dataKey="date" stroke="#94a3b8" fontSize={12} />
-                                <YAxis 
-                                    stroke="#94a3b8" 
-                                    fontSize={12} 
-                                    domain={chartMetric === 'occupancy' ? [0, 100] : ['auto', 'auto']}
-                                    label={{ 
-                                        value: chartMetric === 'occupancy' ? '%' : (chartMetric === 'rent' ? '元' : '数值'), 
-                                        angle: -90, 
-                                        position: 'insideLeft',
-                                        style: { textAnchor: 'middle', fill: '#94a3b8', fontSize: 10 }
-                                    }}
-                                />
-                                <Tooltip 
-                                    cursor={{fill: '#f1f5f9'}} 
-                                    contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}} 
-                                />
-                                <Bar 
-                                    dataKey={chartMetric} 
-                                    name={chartMetric === 'occupancy' ? '出租率' : (chartMetric === 'rent' ? '租金' : '中介费(估)')}
-                                    fill={chartMetric === 'occupancy' ? '#3b82f6' : (chartMetric === 'rent' ? '#10b981' : '#f59e0b')} 
-                                    radius={[4, 4, 0, 0]}
-                                    barSize={40}
-                                />
-                            </BarChart>
-                        </ResponsiveContainer>
-                    </div>
+                                <option value="6M">近半年</option>
+                                <option value="1Y">近一年</option>
+                                <option value="YTD">今年</option>
+                                {availableYears.map(y => <option key={y} value={y}>{y}年</option>)}
+                            </select>
+                            <div className="flex bg-slate-100 p-1 rounded-lg">
+                                <button 
+                                    onClick={() => setChartMetric('occupancy')}
+                                    className={`px-2 py-0.5 text-xs font-medium rounded transition ${chartMetric === 'occupancy' ? 'bg-white shadow text-accent' : 'text-slate-500 hover:text-slate-700'}`}
+                                >
+                                    出租率
+                                </button>
+                                <button 
+                                    onClick={() => setChartMetric('rent')}
+                                    className={`px-2 py-0.5 text-xs font-medium rounded transition ${chartMetric === 'rent' ? 'bg-white shadow text-accent' : 'text-slate-500 hover:text-slate-700'}`}
+                                >
+                                    租金
+                                </button>
+                                    <button 
+                                    onClick={() => setChartMetric('commission')}
+                                    className={`px-2 py-0.5 text-xs font-medium rounded transition ${chartMetric === 'commission' ? 'bg-white shadow text-accent' : 'text-slate-500 hover:text-slate-700'}`}
+                                >
+                                    佣金
+                                </button>
+                            </div>
+                        </div>
                 </div>
-            )}
+                
+                <div className="h-64">
+                    {chartData.length > 0 ? (
+                        <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={chartData}>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                            <XAxis dataKey="date" stroke="#94a3b8" fontSize={12} />
+                            <YAxis 
+                                stroke="#94a3b8" 
+                                fontSize={12} 
+                                domain={chartMetric === 'occupancy' ? [0, 100] : ['auto', 'auto']}
+                                label={{ 
+                                    value: chartMetric === 'occupancy' ? '%' : (chartMetric === 'rent' ? '元' : '数值'), 
+                                    angle: -90, 
+                                    position: 'insideLeft',
+                                    style: { textAnchor: 'middle', fill: '#94a3b8', fontSize: 10 }
+                                }}
+                            />
+                            <Tooltip 
+                                cursor={{fill: '#f1f5f9'}} 
+                                contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}} 
+                            />
+                            <Bar 
+                                dataKey={chartMetric === 'commission' ? 'commission' : (chartMetric === 'rent' ? 'rent' : 'occupancy')} 
+                                name={chartMetric === 'occupancy' ? '出租率' : (chartMetric === 'rent' ? '租金' : '中介费(估)')}
+                                fill={chartMetric === 'occupancy' ? '#3b82f6' : (chartMetric === 'rent' ? '#10b981' : '#f59e0b')} 
+                                radius={[4, 4, 0, 0]}
+                                barSize={40}
+                            />
+                        </BarChart>
+                    </ResponsiveContainer>
+                    ) : (
+                        <div className="flex items-center justify-center h-full text-slate-400 text-sm">
+                            该时间段内无数据
+                        </div>
+                    )}
+                </div>
+            </div>
 
             {/* Timeline */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
@@ -243,7 +290,7 @@ const ParkDetail: React.FC<ParkDetailProps> = ({ parkId, onBack }) => {
                 </div>
                 <div>
                     {surveys.map((survey) => {
-                        const buildingName = park.buildings.find(b => b.id === survey.buildingId)?.name || '未知楼栋';
+                        const buildingName = buildings.find(b => b.id === survey.buildingId)?.name || '未知楼栋';
                         return (
                             <div key={survey.id} className="p-6 border-b border-slate-100 last:border-0 hover:bg-slate-50 transition">
                                 <div className="flex justify-between items-start mb-3">
@@ -379,7 +426,7 @@ const ParkDetail: React.FC<ParkDetailProps> = ({ parkId, onBack }) => {
                 )}
 
                 <ul className="space-y-2">
-                    {park.buildings.map(b => (
+                    {buildings.map(b => (
                         <li key={b.id} className="group flex justify-between items-center p-2 rounded hover:bg-slate-50 text-sm text-slate-700 transition">
                             <div className="flex items-center">
                                 <BuildingIcon className="w-4 h-4 mr-2 text-slate-400" />
@@ -404,7 +451,7 @@ const ParkDetail: React.FC<ParkDetailProps> = ({ parkId, onBack }) => {
                             </div>
                         </li>
                     ))}
-                    {park.buildings.length === 0 && (
+                    {buildings.length === 0 && (
                         <li className="text-xs text-slate-400 text-center py-2">暂无楼栋数据，请添加。</li>
                     )}
                 </ul>
@@ -412,7 +459,7 @@ const ParkDetail: React.FC<ParkDetailProps> = ({ parkId, onBack }) => {
         </div>
       </div>
 
-      {isSurveyModalOpen && (
+      {isSurveyModalOpen && park && (
         <SurveyForm 
             park={park}
             existingSurvey={editingSurvey}

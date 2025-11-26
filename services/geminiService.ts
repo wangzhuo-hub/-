@@ -1,3 +1,4 @@
+
 import { GoogleGenAI } from "@google/genai";
 import { Park, SurveyRecord } from "../types";
 
@@ -8,12 +9,16 @@ export const GeminiService = {
    * Generates a high-level market summary based on all parks and their latest statistics.
    */
   generateMarketOverview: async (parks: Park[], surveys: SurveyRecord[]) => {
+    // Identify Own Park
+    const ownPark = parks.find(p => p.isOwnPark);
+    
     // Prepare data context
     const dataContext = parks.map(p => {
         const parkSurveys = surveys.filter(s => s.parkId === p.id);
         const latestSurvey = parkSurveys.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
         return {
             name: p.name,
+            isMyProject: !!p.isOwnPark,
             latestOccupancy: latestSurvey ? latestSurvey.occupancyRate : 'N/A',
             latestPrice: latestSurvey ? latestSurvey.rentPrice : 'N/A',
             commission: latestSurvey ? latestSurvey.commission : 'N/A',
@@ -23,12 +28,17 @@ export const GeminiService = {
     });
 
     const prompt = `
-      作为一名房地产市场分析师，请根据以下竞品办公园区的调研数据进行分析：
+      作为一名资深房地产招商策略分析师，请根据以下竞品办公园区的调研数据进行分析：
       ${JSON.stringify(dataContext, null, 2)}
       
-      请提供一段简明扼要的市场现状总结（约150字）。
-      并指出2个关键的市场趋势（例如：出租率变化、租金价格走势、佣金战、重大事件影响等）。
-      保持语气专业、客观，并给出可行的建议。请用中文回答。
+      ${ownPark ? `请特别关注本方项目“${ownPark.name}”与市场的对比。` : ''}
+
+      请完成以下任务：
+      1. **市场综述**：一段简明扼要的市场现状总结（约100字）。
+      2. **竞品对比**：指出本方项目在租金、出租率或政策上的优势与劣势。
+      3. **招商策略建议**：基于当前市场趋势，为本方项目提出3条具体的招商策略（如：调整佣金、优化交付标准、针对特定行业招商等）。
+
+      请用中文回答，语气专业、客观。
     `;
 
     try {
