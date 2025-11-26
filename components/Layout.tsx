@@ -1,7 +1,7 @@
 
 import React, { useRef } from 'react';
 import { ViewState } from '../types';
-import { LayoutDashboard, Building2, Menu, Activity, Download, Upload } from 'lucide-react';
+import { LayoutDashboard, Building2, Menu, Activity, Download, Upload, Trash2 } from 'lucide-react';
 import { StorageService } from '../services/storageService';
 
 interface LayoutProps {
@@ -48,6 +48,13 @@ const Layout: React.FC<LayoutProps> = ({ currentView, onChangeView, children }) 
     reader.readAsText(file);
     if(fileInputRef.current) fileInputRef.current.value = '';
   };
+  
+  const handleReset = () => {
+      if (window.confirm('⚠️ 警告：这将清空所有录入的园区和调研数据，且无法撤销！\n\n确定要清空吗？建议先备份数据。')) {
+          StorageService.resetData();
+          window.location.reload();
+      }
+  };
 
   const NavItem = ({ view, icon: Icon, label }: { view: ViewState; icon: any; label: string }) => (
     <button
@@ -90,9 +97,15 @@ const Layout: React.FC<LayoutProps> = ({ currentView, onChangeView, children }) 
             </button>
             <button 
                 onClick={() => fileInputRef.current?.click()}
-                className="flex items-center w-full px-2 py-2 text-sm text-slate-300 hover:text-white hover:bg-slate-800 rounded transition"
+                className="flex items-center w-full px-2 py-2 text-sm text-slate-300 hover:text-white hover:bg-slate-800 rounded transition mb-1"
             >
                 <Upload className="w-4 h-4 mr-2" /> 恢复数据
+            </button>
+            <button 
+                onClick={handleReset}
+                className="flex items-center w-full px-2 py-2 text-sm text-red-400 hover:text-red-300 hover:bg-red-900/20 rounded transition"
+            >
+                <Trash2 className="w-4 h-4 mr-2" /> 清空数据
             </button>
             <input 
                 type="file" 
@@ -104,7 +117,7 @@ const Layout: React.FC<LayoutProps> = ({ currentView, onChangeView, children }) 
         </div>
 
         <div className="p-4 border-t border-slate-700 text-xs text-slate-500 text-center">
-            v1.1.0
+            v1.2.0
         </div>
       </aside>
 
@@ -135,6 +148,9 @@ const Layout: React.FC<LayoutProps> = ({ currentView, onChangeView, children }) 
                 </button>
                 <button onClick={() => fileInputRef.current?.click()} className="flex items-center w-full px-4 py-3 text-slate-300 hover:bg-slate-700">
                     <Upload className="w-5 h-5 mr-3" /> 恢复数据
+                </button>
+                <button onClick={handleReset} className="flex items-center w-full px-4 py-3 text-red-400 hover:bg-slate-700">
+                    <Trash2 className="w-5 h-5 mr-3" /> 清空数据
                 </button>
               </div>
             </nav>

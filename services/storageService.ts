@@ -7,7 +7,7 @@ const KEYS = {
   SETTINGS: 'marketscope_settings',
 };
 
-// Seed Data
+// Seed Data - Only keep Own Park template, remove competitors and surveys
 const SEED_PARKS: Park[] = [
   {
     id: 'p-kingdee',
@@ -22,96 +22,10 @@ const SEED_PARKS: Park[] = [
     totalArea: 43000,
     createdAt: Date.now(),
     isOwnPark: true
-  },
-  {
-    id: 'p1',
-    name: '科创未来产业园',
-    address: '北区科技大道101号',
-    description: '专注于科技初创企业的甲级办公园区，配套设施完善。',
-    buildings: [
-        { id: 'b1-1', name: 'A座', area: 25000 }, 
-        { id: 'b1-2', name: 'B座', area: 25000 }
-    ],
-    tags: ['科技', '甲级'],
-    totalArea: 50000,
-    createdAt: Date.now(),
-  },
-  {
-    id: 'p2',
-    name: '绿谷商务中心',
-    address: '西区生态路88号',
-    description: '低密度花园式办公园区，环境优美，适合创意类企业。',
-    buildings: [
-        { id: 'b2-1', name: '1号楼', area: 12000 }, 
-        { id: 'b2-2', name: '2号楼', area: 11000 }, 
-        { id: 'b2-3', name: '3号楼', area: 12000 }
-    ],
-    tags: ['生态', '低密度'],
-    totalArea: 35000,
-    createdAt: Date.now(),
   }
 ];
 
-const SEED_SURVEYS: SurveyRecord[] = [
-  {
-    id: 'sk-1',
-    parkId: 'p-kingdee',
-    buildingId: 'bk-1',
-    date: '2023-10-15',
-    occupancyRate: 92,
-    rentPrice: 5.5,
-    commission: '1个月',
-    deliveryStandard: '精装修',
-    photos: [],
-    responsiblePerson: '运营部',
-    marketAnalysis: '出租率保持高位，主力租户稳定。',
-    timestamp: Date.now() - 4000000,
-  },
-  {
-    id: 's1',
-    parkId: 'p1',
-    buildingId: 'b1-1',
-    date: '2023-08-15',
-    occupancyRate: 85,
-    rentPrice: 4.2,
-    commission: '1个月',
-    deliveryStandard: '标准装修',
-    photos: [],
-    responsiblePerson: '张经理',
-    marketAnalysis: '由于附近地铁站开通，咨询量明显上升。',
-    significantEvents: '地铁10号线出口正式开通，人流量显著增加。',
-    timestamp: Date.now() - 10000000,
-  },
-  {
-    id: 's2',
-    parkId: 'p1',
-    buildingId: 'b1-1',
-    date: '2023-10-01',
-    occupancyRate: 88,
-    rentPrice: 4.5,
-    commission: '0.8个月',
-    deliveryStandard: '标准装修',
-    photos: [],
-    responsiblePerson: '张经理',
-    marketAnalysis: '出租率稳步提升，佣金政策有所收紧。',
-    timestamp: Date.now() - 5000000,
-  },
-   {
-    id: 's3',
-    parkId: 'p2',
-    buildingId: 'b2-1',
-    date: '2023-09-20',
-    occupancyRate: 72,
-    rentPrice: 3.8,
-    commission: '1.5个月',
-    deliveryStandard: '毛坯',
-    photos: [],
-    responsiblePerson: '李专员',
-    marketAnalysis: '受地理位置影响，去化速度较慢，需加大渠道推广力度。',
-    significantEvents: '园区食堂开始试营业，受到租户好评。',
-    timestamp: Date.now() - 6000000,
-  }
-];
+const SEED_SURVEYS: SurveyRecord[] = [];
 
 const DEFAULT_SETTINGS: AppSettings = {
     quarterlyTarget: 12 // Default to approx 1 per week (12 per quarter)
@@ -131,20 +45,13 @@ export const StorageService = {
             if (!Array.isArray(existingParks)) throw new Error("Invalid format");
             
             // Migration: Check if Kingdee exists, if not add it
-            // Use optional chaining to safely access potentially missing properties
             const hasKingdee = existingParks.some(p => p && (p.id === 'p-kingdee' || (p.name && p.name.includes('金蝶'))));
             if (!hasKingdee) {
                 existingParks.unshift(SEED_PARKS[0]); // Add Kingdee at top
                 localStorage.setItem(KEYS.PARKS, JSON.stringify(existingParks));
-                
-                // Also add seed survey for Kingdee
-                const existingSurveys = StorageService.getSurveys();
-                existingSurveys.push(SEED_SURVEYS[0]);
-                localStorage.setItem(KEYS.SURVEYS, JSON.stringify(existingSurveys));
             }
         } catch (e) {
             console.error("Failed to parse existing parks or migration error", e);
-            // Fallback: don't overwrite user data blindly, but ensure app loads
             if (existingParks.length === 0) existingParks = SEED_PARKS;
         }
     }
@@ -312,13 +219,20 @@ export const StorageService = {
           return false;
       }
   },
+  
+  resetData: () => {
+      localStorage.removeItem(KEYS.PARKS);
+      localStorage.removeItem(KEYS.SURVEYS);
+      localStorage.removeItem(KEYS.SETTINGS);
+      StorageService.init(); // Re-seed with just the template
+      return true;
+  },
 
   getSettings: (): AppSettings => {
       const data = localStorage.getItem(KEYS.SETTINGS);
       if (data) {
           try {
             const parsed = JSON.parse(data);
-            // Simple migration for new key
             if (!parsed.quarterlyTarget && parsed.monthlyTarget) {
                 parsed.quarterlyTarget = parsed.monthlyTarget * 3;
             }
